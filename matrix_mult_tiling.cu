@@ -13,7 +13,7 @@
 using namespace std;
 
 // Function that multiplies 2 matrices using gpu tiling
-__global__ void matrixMultiplyGPUTiling(int *A, int *B, int *C, const int n) {
+__global__ void matrixMultiplyGPUTiling(double *A, double *B, double *C, const int n) {
     __shared__ double tileA[TILE_SIZE * TILE_SIZE];
     __shared__ double tileB[TILE_SIZE * TILE_SIZE];
 
@@ -29,8 +29,8 @@ __global__ void matrixMultiplyGPUTiling(int *A, int *B, int *C, const int n) {
             tileA[y*TILE_SIZE+x] = A[row*n + i*TILE_SIZE+x];
         else
             tileA[y*TILE_SIZE+x] = 0.0f;
-        
-        if (col < n && i * TILE_SIZE + y < n) 
+
+        if (col < n && i * TILE_SIZE + y < n)
             tileB[y*TILE_SIZE+x] = B[(i*TILE_SIZE+y)*n + col];
         else
             tileB[y*TILE_SIZE+x] = 0.0f;
@@ -41,13 +41,13 @@ __global__ void matrixMultiplyGPUTiling(int *A, int *B, int *C, const int n) {
         }
         __syncthreads();
     }
-    if (ix < n && iy < n) {
-        C[col*n+row] += sum
+    if (col < n && row < n) {
+        C[col*n+row] += sum;
     }
 }
 
 // Function that multiplies 2 matrices using gpu
-__global__ void matrixMultiplyGPU(int *A, int *B, int *C, const int n) {
+__global__ void matrixMultiplyGPU(double *A, double *B, double *C, const int n) {
     unsigned int ix = threadIdx.x + blockIdx.x * blockDim.x;
     unsigned int iy = threadIdx.y + blockIdx.y * blockDim.y;
 
@@ -59,7 +59,7 @@ __global__ void matrixMultiplyGPU(int *A, int *B, int *C, const int n) {
 }
 
 // Function that multiplies 2 matrices on cpu
-void matrixMultiply(int *A, int *B, int *C, const int n) {
+void matrixMultiply(double *A, double *B, double *C, const int n) {
     for(int i = 0; i < n; i++) {
         for(int j = 0; j < n; j++) {
             for(int k = 0; k < n; k++) {
@@ -74,9 +74,9 @@ void printMatrix(double *matrix, const int n) {
 	// Prints the matrix with numbers shortened to 2 decimals and tabs separating them
 	int size = n*n;
     for (int i = 0; i < size; i++) {
-        std::cout << matrix[rows + i + j] << " ";
+        std::cout << matrix[i] << " ";
         if (i != 0 && i % n == 0)
-    		std::cout << std::endl;
+    		  std::cout << std::endl;
 	}
 	return;
 }
@@ -97,90 +97,88 @@ bool matrixCompare(double *m_A, double *m_B, const int n) {
 int main(int argc, char *argv[]) {
 	// Set up device
 	int dev = 0;
-	cudaDevideProp deviceProp;
+	cudaDeviceProp deviceProp;
 	cudaGetDeviceProperties(&deviceProp, dev);
 	printf("Using Device %d: %s\n", dev, deviceProp.name);
-    cudaSetDevice(dev);
-    
-	int repetitions = 1;
-    // Matrix information
-    int n = 20;
+  cudaSetDevice(dev);
+
+  // Matrix information
+  int n = 2000;
 	int bytes = n*n * sizeof(double *);
 
-    // Host matrices
-    double *h_A = (double *)malloc(bytes);
-    double *h_B = (double *)malloc(bytes);
+  // Host matrices
+  double *h_A = (double *)malloc(bytes);
+  double *h_B = (double *)malloc(bytes);
 
-    // Results
-    double *hostRef = (double *)malloc(bytes);
-    double *gpuRef = (double *)malloc(bytes);
+  // Results
+  double *hostRef = (double *)malloc(bytes);
+  double *gpuRef = (double *)malloc(bytes);
 
 	// Fill result matrices w zeros
-	memSet(hostRef, 0, bytes);
-	memSet(gpuRef, 0, bytes);
+	memset(hostRef, 0, bytes);
+	memset(gpuRef, 0, bytes);
 
-    // Fill input matrices with random nums between 1 and 10
-    for (int i = 0; i < n; i++) {
-        h_A[i] = 1 + (static_cast <double> rand()) / (static_cast <double> (RAND_MAX/9));
-        h_B[i] = 1 + (static_cast <double> rand()) / (static_cast <double> (RAND_MAX/9));
-    }
+  // Fill input matrices with random nums between 1 and 10
+  for (int i = 0; i < n; i++) {
+      h_A[i] = 1 + static_cast <double> (rand()) / (static_cast <double> (RAND_MAX/9));
+      h_B[i] = 1 + static_cast <double> (rand()) / (static_cast <double> (RAND_MAX/9));
+  }
 
-    // Set up device
+  // Set up device
 	double *d_A, *d_B, *d_C;
-    cudaMalloc((void **)&d_A, bytes);
-    cudaMalloc((void **)&d_B, bytes);
-    cudaMalloc((void **)&d_C, bytes);
+  cudaMalloc((void **)&d_A, bytes);
+  cudaMalloc((void **)&d_B, bytes);
+  cudaMalloc((void **)&d_C, bytes);
 
 	cudaMemcpy(d_A, h_A, bytes, cudaMemcpyHostToDevice);
-    cudaMemcpy(d_B, h_B, bytes, cudaMemcpyHostToDevice);
-    cudaMemset(d_C, 0, bytes);
+  cudaMemcpy(d_B, h_B, bytes, cudaMemcpyHostToDevice);
+  cudaMemset(d_C, 0, bytes);
 
 	dim3 block(TILE_SIZE, TILE_SIZE);
-    dim3 grid((n + block.x - 1) / block.x, (n + block.y - 1) / block.y);
-    cout <<"grid.x "<<grid.x<<" grid.y "<<grid.y<<" block.x "<<block.x<<" block.y "<<block.y<< endl;
+  dim3 grid((n + block.x - 1) / block.x, (n + block.y - 1) / block.y);
+  cout <<"grid.x "<<grid.x<<" grid.y "<<grid.y<<" block.x "<<block.x<<" block.y "<<block.y<< endl;
 
-    // Multiply and time CPU
+  // Multiply and time CPU
 	auto start = std::chrono::high_resolution_clock::now();
 	matrixMultiply(h_A, h_B, hostRef, n);
 	auto end = std::chrono::high_resolution_clock::now();
-    
-    std::chrono::duration<float, std::milli> duration_ms = end - start;
-    double totalTime = duration_ms.count();
-    cout << "Time for multiplying on cpu: " << totalTime << endl;
 
-    // Multiply matrices in gpu
-    start = std::chrono::high_resolution_clock::now();
-    matrixMultiplyGPU<<<grid, block>>>(d_A, d_B, d_C, n);
-    cudaDeviceSynchronize();
-    end = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<float, std::milli> duration_ms = end - start;
+  double totalTime = duration_ms.count();
+  cout << "Time for multiplying on cpu: " << totalTime << endl;
 
-    cudaMemcpy(gpuRef, d_C, bytes, cudaMemcpyDeviceToHost);
-    cout << (matrixCompare(hostRef, gpuRef) ? "Correctly multiplied both matrices (comparing GPU and CPU)" : "Incorrect GPU multiplication") << endl;
-    
-    std::chrono::duration<float, std::milli> duration_ms = end - start;
-    totalTime = duration_ms.count();
-    cout << "Time for multiplying on gpu: " << totalTime << endl;
+  // Multiply matrices in gpu
+  start = std::chrono::high_resolution_clock::now();
+  matrixMultiplyGPU<<<grid, block>>>(d_A, d_B, d_C, n);
+  cudaDeviceSynchronize();
+  end = std::chrono::high_resolution_clock::now();
 
-    // Multiply matrices in gpu with tiling
-    start = std::chrono::high_resolution_clock::now();
-    matrixMultiplyGPUTiling<<<grid, block>>>(d_A, d_B, d_C, n);
-    cudaDeviceSynchronize();
-    end = std::chrono::high_resolution_clock::now();
+  cudaMemcpy(gpuRef, d_C, bytes, cudaMemcpyDeviceToHost);
+  cout << (matrixCompare(hostRef, gpuRef, n) ? "Correctly multiplied both matrices (comparing GPU and CPU)" : "Incorrect GPU multiplication") << endl;
 
-    cudaMemcpy(gpuRef, d_C, bytes, cudaMemcpyDeviceToHost);
-    cout << (matrixCompare(hostRef, gpuRef) ? "Correctly multiplied both matrices (comparing GPU with tiling and CPU)" : "Incorrect GPU tiling multiplication") << endl;
+  duration_ms = end - start;
+  totalTime = duration_ms.count();
+  cout << "Time for multiplying on gpu: " << totalTime << endl;
 
-    std::chrono::duration<float, std::milli> duration_ms = end - start;
-    totalTime = duration_ms.count();
-    cout << "Time for multiplying on gpu with tiling: " << totalTime << endl;
+  // Multiply matrices in gpu with tiling
+  start = std::chrono::high_resolution_clock::now();
+  matrixMultiplyGPUTiling<<<grid, block>>>(d_A, d_B, d_C, n);
+  cudaDeviceSynchronize();
+  end = std::chrono::high_resolution_clock::now();
 
+  cudaMemcpy(gpuRef, d_C, bytes, cudaMemcpyDeviceToHost);
+  cout << (matrixCompare(hostRef, gpuRef, n) ? "Correctly multiplied both matrices (comparing GPU with tiling and CPU)" : "Incorrect GPU tiling multiplication") << endl;
 
-	// Free memory that was allocated for matrixes
-	free(h_A);
-	free(h_B);
-	free(hostRef);
-	free(gpuRef);
+  duration_ms = end - start;
+  totalTime = duration_ms.count();
+  cout << "Time for multiplying on gpu with tiling: " << totalTime << endl;
 
-	SAFE_CALL(cudaDeviceReset(), "Error reseting");
-	return 0;
+  // Free memory that was allocated for matrixes
+  free(h_A);
+  free(h_B);
+  free(hostRef);
+  free(gpuRef);
+
+  cudaDeviceReset();
+  return 0;
 }

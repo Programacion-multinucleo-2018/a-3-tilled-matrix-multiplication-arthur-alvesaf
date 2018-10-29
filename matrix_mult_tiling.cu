@@ -103,7 +103,7 @@ int main(int argc, char *argv[]) {
   cudaSetDevice(dev);
 
   // Matrix information
-  int n = 2000;
+  int n = 1000;
 	int bytes = n*n * sizeof(double *);
 
   // Host matrices
